@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -290,11 +291,12 @@ func updateImageTemplates(alias, tmpdir string) error {
 	}
 
 	log.Println("Updating metadata/templates in tarball")
-	outTarballName := filepath.Join(tmpdir, "output.tar")
+	outTarballName := filepath.Join(tmpdir, "output.tar.gz")
 	if err := createFinalTarball(
 		outTarballName,
 		filepath.Join(tmpdir, tarballName),
 		metadataOut,
+		gzip.DefaultCompression,
 	); err != nil {
 		return err
 	}
@@ -310,7 +312,11 @@ func updateImageTemplates(alias, tmpdir string) error {
 	return nil
 }
 
-func createFinalTarball(outpath, inpath string, metadata []byte) error {
+func createFinalTarball(
+	outpath, inpath string,
+	metadata []byte,
+	compressionLevel int,
+) error {
 	fin, err := os.Open(inpath)
 	if err != nil {
 		return err
@@ -323,8 +329,13 @@ func createFinalTarball(outpath, inpath string, metadata []byte) error {
 	}
 	defer fout.Close()
 
+	gzout, err := gzip.NewWriterLevel(fout, compressionLevel)
+	if err != nil {
+		return err
+	}
+
 	in := tar.NewReader(fin)
-	out := tar.NewWriter(fout)
+	out := tar.NewWriter(gzout)
 	for {
 		h, err := in.Next()
 		if err == io.EOF {
@@ -365,7 +376,13 @@ func createFinalTarball(outpath, inpath string, metadata []byte) error {
 			return err
 		}
 	}
-	return out.Close()
+	if err := out.Close(); err != nil {
+		return err
+	}
+	if err := gzout.Close(); err != nil {
+		return err
+	}
+	return fout.Close()
 }
 
 func lxc(args ...string) error {
