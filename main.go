@@ -208,6 +208,10 @@ func updateContainer(container string) error {
 		"yum install -y openssh-server redhat-lsb-core cloud-init",
 		// Disable the set_hostname/update_hostname modules, or SELinux sadness ensues.
 		"sed -i -E 's/.*(set|update)_hostname.*/#\\0/' /etc/cloud/cloud.cfg",
+		// Clean out yum cache from previous installs.
+		"yum clean all",
+		// Remove SSH host keys so we don't end up with all instances having the same.
+		"/bin/rm -f /etc/ssh/*key*",
 	}
 	for _, command := range commands {
 		if err := lxc("exec", container, "--", "/bin/sh", "-c", command); err != nil {
